@@ -1,6 +1,15 @@
 from datetime import datetime, timezone
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer
+
+
+class DiabetesType(str, Enum):
+    TYPE_1 = "Type 1"
+    TYPE_2 = "Type 2"
+    GESTATIONAL = "Gestational diabetes"
+    OTHER = "Other"
+    UNKNOWN = "Unknown / not sure"
 
 
 class CaseCreate(BaseModel):
@@ -11,6 +20,8 @@ class CaseCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     email: EmailStr = Field(max_length=254)
+    age: int = Field(ge=0, le=120)
+    diabetes_type: DiabetesType
 
 
 class CaseResponse(BaseModel):
@@ -19,6 +30,8 @@ class CaseResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+    age: int
+    diabetes_type: DiabetesType
     status: str
     prediction: str | None
     created_at: datetime

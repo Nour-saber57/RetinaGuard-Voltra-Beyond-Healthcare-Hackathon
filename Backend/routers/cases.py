@@ -17,6 +17,8 @@ def create_case(
     case = Case(
         name=payload.name,
         email=str(payload.email),
+        age=payload.age,
+        diabetes_type=payload.diabetes_type.value,
     )
 
     db.add(case)
