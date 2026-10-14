@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from Backend.database import get_db
-from Backend.models import Case
-from Backend.schemas import CaseCreate, CaseResponse
+from database import get_db
+from email_service import send_email
+from models import Case
+from schemas import CaseCreate, CaseResponse
 
 router = APIRouter(prefix="/cases", tags=["Cases"])
 
@@ -21,5 +22,15 @@ def create_case(
     db.add(case)
     db.commit()
     db.refresh(case)
+
+    send_email(
+        recipient=case.email,
+        subject="We received your RetinaFlow case",
+        body=(
+            f"Hi {case.name},\n\n"
+            "We received your case submission. Our team will review it and follow up if needed.\n\n"
+            "Thank you,\nRetinaFlow"
+        ),
+    )
 
     return case
