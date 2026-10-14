@@ -7,4 +7,6 @@ opencv-python-headless>=4.10,<5.0
 sqlalchemy>=2.0,<3.0
 email-validator
 pydantic-settings>=2.0,<3.0
+python-multipart>=0.0.9,<1.0
+httpx>=0.27,<1.0
 

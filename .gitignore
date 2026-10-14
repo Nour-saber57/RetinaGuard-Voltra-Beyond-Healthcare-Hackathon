@@ -1,9 +1,13 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.db
+*.db-shm
+*.db-wal
 .env
 .env.*
 !.env.example
 node_modules/
 dist/
+uploads/
 .DS_Store
