@@ -10,6 +10,8 @@ class Case(Base):
     __tablename__ = "cases"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    age:Mapped[int] = mapped_column()
+    diabetes_type: Mapped[str] = mapped_column(String(20))
 
     name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(254))
