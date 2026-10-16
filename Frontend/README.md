@@ -6,13 +6,19 @@ The complete static frontend exported from the current RetinaGuard demo on 16 Oc
 
 No npm packages or build step are required. This is plain HTML, CSS, and JavaScript in `index.html`, not a React project.
 
+Start the backend first from the `Backend` folder:
+
+```bash
+python -m uvicorn main:app --reload --port 8001
+```
+
 From this folder, run:
 
 ```bash
 python -m http.server 8000
 ```
 
-On Windows, you can use `py -m http.server 8000` instead. Open http://localhost:8000 in your browser. Use localhost or HTTPS so browser cryptography and location features can work. Location access still requires user permission.
+On Windows, you can use `py -m http.server 8000` instead. Open http://localhost:8000 in your browser. The frontend calls `http://localhost:8001` by default. To use another API URL, define `window.RETINAGUARD_API_BASE` before the application script in `index.html`. Use localhost or HTTPS so location features can work. Location access still requires user permission.
 
 ## Add to your existing repository
 
@@ -25,16 +31,16 @@ This export does not change or upload to your repository automatically.
 
 ## Features
 
-- Patient sign-up/sign-in demo; clinic sign-in only.
+- Patient registration/sign-in backed by the API; clinic sign-in only.
 - Role choice appears only on the authentication screens.
 - Ordered patient pages with Back/Continue and a page-name selector.
 - Interactive Learn & protect care cycle.
-- Weight, HbA1c, and blood pressure, each with its own measurement date.
+- Persistent weight, HbA1c, and blood pressure entries, each with its own measurement date.
 - Health charts, date filters, editable measurement history, and diabetes type.
 - Profile with contact information and personal charts.
-- Illustrative nearby providers, location sorting, available time slots, booking and cancellation.
+- API-provided illustrative clinics, location sorting, available time slots, booking and cancellation.
 - Five-stage care progress tracker.
-- Clinic dashboard, records, and image preview.
+- Clinic dashboard, patient records, screening image upload, and image preview.
 
 ## Clinic demo credentials
 
@@ -43,14 +49,15 @@ Password: `DemoClinic2026!`
 
 These are intentionally public example credentials, not secrets or production authentication.
 
-## Current limitations
+## Integration boundaries
 
-- This is a frontend prototype. Accounts, health entries, appointments, and progress are held in JavaScript memory and reset on refresh.
-- Client-side role selection and password checking do not enforce secure access. There is no server-side authentication or authorization.
-- Clinics, coordinates, schedules, and fees are examples. No real booking, message, payment, or retinal AI analysis occurs.
-- Use example information only; do not deploy this as a real patient-record system.
-- Connecting your FastAPI backend requires implementing server authentication, per-user/clinic authorization, persistent models, real availability, and API calls in place of the in-memory operations.
-- Source syntax and targeted logic checks were performed during development. Visual browser verification was blocked by the authoring environment.
+- Patient accounts, contact details, diabetes type, health measurements, care milestones, appointments, and screening records are saved in the backend SQLite database. Sign in again after refreshing; access tokens are held in memory only.
+- Patient endpoints are scoped to the signed-in patient. Clinic-wide endpoints require a clinic token. Clinic demo credentials are public examples and must be replaced for any deployment.
+- Clinics, coordinates, fees, hours, and slot availability are illustrative. Bookings are database-backed demonstrations, not real clinic reservations. No messages, payment, or retinal AI analysis occur.
+- Uploaded JPEG/PNG images are stored under `Backend/uploads`. The service does not analyze or diagnose images.
+- Case confirmation email is disabled unless `SEND_CASE_EMAILS=true` is explicitly configured.
+- Use example information only. This prototype has not had the security, privacy, clinical, or operational review needed for real patient records.
+- SQLite tables are created at startup. The existing `cases` table receives a small nullable ownership-column migration; other future schema changes should use a migration tool before deployment.
 
 ## Source organization
 

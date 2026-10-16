@@ -1,5 +1,6 @@
 from io import BytesIO
 import logging
+import os
 from pathlib import Path
 from uuid import uuid4
 from typing import Annotated
@@ -12,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from email_service import send_email
-from models import Case
+from models import Case, Patient
 from schemas import CaseCreate, CaseResponse, DiabetesType
+from security import Principal, current_principal, require_clinic, require_patient
 
 router = APIRouter(prefix="/cases", tags=["Cases"])
 logger = logging.getLogger(__name__)
@@ -24,14 +26,27 @@ ALLOWED_IMAGE_FORMATS = {"JPEG": ".jpg", "PNG": ".png"}
 
 
 @router.get("", response_model=list[CaseResponse])
-def get_cases(db: Session = Depends(get_db)):
+def get_cases(_: Principal = Depends(require_clinic), db: Session = Depends(get_db)):
     return db.scalars(select(Case).order_by(Case.id.desc())).all()
 
 
+@router.get("/mine", response_model=list[CaseResponse])
+def get_my_cases(patient: Patient = Depends(require_patient), db: Session = Depends(get_db)):
+    return db.scalars(
+        select(Case).where(Case.patient_id == patient.id).order_by(Case.id.desc())
+    ).all()
+
+
 @router.get("/{case_id}", response_model=CaseResponse)
-def get_case(case_id: int, db: Session = Depends(get_db)):
+def get_case(
+    case_id: int,
+    principal: Principal = Depends(current_principal),
+    db: Session = Depends(get_db),
+):
     case = db.get(Case, case_id)
     if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if principal.role == "patient" and case.patient_id != int(principal.subject):
         raise HTTPException(status_code=404, detail="Case not found")
     return case
 
@@ -73,18 +88,23 @@ def validate_image(image: UploadFile) -> tuple[bytes, str]:
 
 @router.post("", response_model=CaseResponse, status_code=201)
 def create_case(
-    name: Annotated[str, Form(min_length=1, max_length=100)],
-    age: Annotated[int, Form(ge=0, le=120)],
-    email: Annotated[EmailStr, Form(max_length=254)],
-    diabetes_type: Annotated[DiabetesType, Form()],
     image: Annotated[UploadFile, File()],
+    principal: Principal = Depends(current_principal),
+    patient_id: Annotated[int | None, Form()] = None,
+    name: Annotated[str | None, Form(min_length=1, max_length=100)] = None,
+    age: Annotated[int | None, Form(ge=0, le=120)] = None,
+    email: Annotated[EmailStr | None, Form(max_length=254)] = None,
+    diabetes_type: Annotated[DiabetesType | None, Form()] = None,
     db: Session = Depends(get_db),
 ):
+    patient = principal.patient if principal.role == "patient" else db.get(Patient, patient_id)
+    if patient is None:
+        raise HTTPException(status_code=422, detail="Select a valid patient for this screening")
     payload = CaseCreate(
-        name=name,
+        name=patient.name,
         age=age,
-        email=email,
-        diabetes_type=diabetes_type,
+        email=patient.email,
+        diabetes_type=patient.diabetes_type,
     )
     image_contents, image_extension = validate_image(image)
     upload_path: Path | None = None
@@ -104,6 +124,7 @@ def create_case(
             image_path=(Path("uploads") / filename).as_posix(),
             status="image_uploaded",
             prediction=None,
+            patient_id=patient.id,
         )
 
         db.add(case)
@@ -119,17 +140,18 @@ def create_case(
                 logger.exception("Failed to remove image after case persistence failed")
         raise
 
-    try:
-        send_email(
-            recipient=case.email,
-            subject="We received your RetinaFlow case",
-            body=(
-                f"Hi {case.name},\n\n"
-                "We received your case submission. Our team will review it and follow up if needed.\n\n"
-                "Thank you,\nRetinaFlow"
-            ),
-        )
-    except Exception:
-        logger.exception("Failed to send case confirmation email")
+    if os.getenv("SEND_CASE_EMAILS", "false").lower() in {"1", "true", "yes"}:
+        try:
+            send_email(
+                recipient=case.email,
+                subject="We received your RetinaGuard case",
+                body=(
+                    f"Hi {case.name},\n\n"
+                    "We received your case submission. Our team will review it and follow up if needed.\n\n"
+                    "Thank you,\nRetinaGuard"
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to send case confirmation email")
 
     return case
