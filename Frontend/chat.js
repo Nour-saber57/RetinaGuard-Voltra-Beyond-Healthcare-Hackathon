@@ -13,7 +13,7 @@ recordChatRoot.innerHTML = `
     </header>
     <section class="record-chat-consent" id="recordChatConsent">
       <h3>Before you start</h3>
-      <p>Your question, recent chat, and a summary of your diabetes type, measurements, appointments, and screening records will be sent to Google Gemini to prepare an answer. RetinaGuard does not save chat history. Google processes the request under its Gemini API terms. Do not use this assistant for urgent care.</p>
+      <p>Routine record lookups and urgent-care guidance are handled by RetinaGuard. When you ask for a summary, your question and only relevant record IDs, dates, types, statuses, and appointment labels are sent to Google Gemini so it can select records. Measurement values and saved prediction text are not sent to Google. Chat history is not saved or sent. Google processes summary requests under its Gemini API terms. Do not use this assistant for urgent care.</p>
       <label><input id="recordChatConsentCheck" type="checkbox" onchange="updateRecordChatConsent()"><span>I agree to send my question and the listed record summary to Google Gemini.</span></label>
       <button id="recordChatStart" type="button" onclick="startRecordChat()" disabled>Continue to chat</button>
     </section>
@@ -43,16 +43,18 @@ document.head.append(recordChatPageStyle);
 let recordChatOpen = false;
 let recordChatConsentGiven = false;
 let recordChatBusy = false;
-let recordChatTurns = [];
 let recordChatOwner = null;
 let recordChatSessionVersion = 0;
+let recordChatChartContext = null;
+let recordChatPrefillMessage = '';
 
 function clearRecordChatSession() {
   recordChatSessionVersion++;
   recordChatOpen = false;
   recordChatConsentGiven = false;
   recordChatBusy = false;
-  recordChatTurns = [];
+    recordChatChartContext = null;
+    recordChatPrefillMessage = '';
   document.getElementById('recordChatSend').disabled = false;
   document.getElementById('recordChatConsentCheck').checked = false;
   document.getElementById('recordChatStart').disabled = true;
@@ -85,6 +87,7 @@ function recordChatSyncVisibility() {
       panel.setAttribute('aria-label', 'Chat about my patient records');
       panel.hidden = false;
       app.append(panel);
+        if (recordChatPrefillMessage) document.getElementById('recordChatInput').value = recordChatPrefillMessage;
     } else {
       if (panel.parentElement !== recordChatRoot) recordChatRoot.append(panel);
       panel.classList.remove('record-chat-page');
@@ -110,6 +113,35 @@ function toggleRecordChat() {
   document.getElementById('recordChatPanel').hidden = !recordChatOpen;
   document.getElementById('recordChatLauncher').setAttribute('aria-expanded', String(recordChatOpen));
   if (recordChatOpen && recordChatConsentGiven) document.getElementById('recordChatInput').focus();
+}
+
+function askAboutHealthChart(metric) {
+  const labels = {weight: 'weight', a1c: 'HbA1c', bp: 'blood pressure'};
+  if (!labels[metric]) return;
+  recordChatChartContext = {
+    metric,
+    visible_metrics: ['weight', 'a1c', 'bp'],
+    date_range: healthRange,
+    example_preview: showHealthExample,
+  };
+  recordChatPrefillMessage = `What do you think about my ${labels[metric]} graph?`;
+  go('Chat assistant');
+}
+
+function syncHealthChartActions() {
+  if (mode !== 'patient' || page !== 'Health dashboard') return;
+  const charts = document.querySelectorAll('.healthcharts > .card');
+  const metrics = ['weight', 'a1c', 'bp'];
+  charts.forEach((chart, index) => {
+    if (chart.querySelector('.chart-chat-action')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary chart-chat-action';
+    button.style.marginTop = '14px';
+    button.textContent = 'Ask about this chart';
+    button.addEventListener('click', () => askAboutHealthChart(metrics[index]));
+    chart.append(button);
+  });
 }
 
 function updateRecordChatConsent() {
@@ -143,7 +175,6 @@ async function sendRecordChat(event) {
   const message = input.value.trim();
   if (!message) return;
 
-  const history = recordChatTurns.slice(-10);
   appendRecordChatBubble('user', message);
   input.value = '';
   recordChatBusy = true;
@@ -152,13 +183,13 @@ async function sendRecordChat(event) {
   document.getElementById('recordChatStatus').textContent = 'Checking your records…';
 
   try {
+    const body = {consent: true, message};
+    if (recordChatChartContext) body.chart_context = recordChatChartContext;
     const result = await apiRequest('/chat', {
       method: 'POST',
-      body: JSON.stringify({ consent: true, message, history }),
+      body: JSON.stringify(body),
     });
     if (sessionVersion !== recordChatSessionVersion) return;
-    recordChatTurns.push({ role: 'user', content: message });
-    recordChatTurns.push({ role: 'assistant', content: result.reply });
     appendRecordChatBubble('assistant', result.reply);
   } catch (error) {
     if (sessionVersion !== recordChatSessionVersion) return;
@@ -187,5 +218,6 @@ const renderBeforeRecordChat = render;
 render = function () {
   renderBeforeRecordChat();
   recordChatSyncVisibility();
+  syncHealthChartActions();
 };
 recordChatSyncVisibility();

@@ -174,16 +174,20 @@ class AppointmentResponse(BaseModel):
     confirmation_email_sent: bool | None = None
 
 
-class ChatTurn(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=1200)
+class PatientChartContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric: Literal["weight", "a1c", "bp"] | None = None
+    visible_metrics: list[Literal["weight", "a1c", "bp"]] = Field(default_factory=list, max_length=3)
+    date_range: Literal["all", "30", "90", "180", "365"] = "all"
+    example_preview: bool = False
 
 
 class PatientChatRequest(BaseModel):
     consent: bool
     message: str = Field(min_length=1, max_length=1200)
-    history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+    chart_context: PatientChartContext | None = None
 
 
 class PatientChatResponse(BaseModel):
-    reply: str
+    reply: str = Field(min_length=1, max_length=1200)
