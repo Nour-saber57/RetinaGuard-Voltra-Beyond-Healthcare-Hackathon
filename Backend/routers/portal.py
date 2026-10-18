@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+import logging
 import os
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -9,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import get_db
+from email_service import send_email
 from models import Appointment, Clinic, HealthMeasurement, Patient
 from schemas import (
     AppointmentCreate,
@@ -38,6 +40,7 @@ from security import (
 )
 
 router = APIRouter(tags=["Portal"])
+logger = logging.getLogger(__name__)
 CAIRO = ZoneInfo("Africa/Cairo")
 PROVIDERS = [
     Clinic(id="bright", name="Bright Vision Eye Center", area="Nasr City", address="Demo location · Nasr City, Cairo", latitude=30.0566, longitude=31.3383, fee=450, hours="Saturday–Thursday · 09:00–17:00", specialty="Retinal screening & ophthalmology"),
@@ -49,7 +52,17 @@ PROVIDERS = [
 def seed_clinics(db: Session) -> None:
     for provider in PROVIDERS:
         if db.get(Clinic, provider.id) is None:
-            db.add(provider)
+            db.add(Clinic(
+                id=provider.id,
+                name=provider.name,
+                area=provider.area,
+                address=provider.address,
+                latitude=provider.latitude,
+                longitude=provider.longitude,
+                fee=provider.fee,
+                hours=provider.hours,
+                specialty=provider.specialty,
+            ))
     db.commit()
 
 
@@ -294,7 +307,11 @@ def clinic_availability(clinic_id: str, db: Session = Depends(get_db)):
     ]
 
 
-def appointment_data(appointment: Appointment, db: Session) -> dict:
+def appointment_data(
+    appointment: Appointment,
+    db: Session,
+    confirmation_email_sent: bool | None = None,
+) -> dict:
     patient = db.get(Patient, appointment.patient_id)
     return AppointmentResponse(
         id=appointment.id,
@@ -304,6 +321,7 @@ def appointment_data(appointment: Appointment, db: Session) -> dict:
         date=appointment.appointment_date,
         time=appointment.appointment_time,
         status=appointment.status,
+        confirmation_email_sent=confirmation_email_sent,
     ).model_dump(mode="json")
 
 
@@ -351,7 +369,28 @@ def create_appointment(
         db.rollback()
         raise HTTPException(status_code=409, detail="That appointment slot was just booked") from error
     db.refresh(appointment)
-    return appointment_data(appointment, db)
+    email_sent = False
+    try:
+        send_email(
+            recipient=patient.email,
+            subject="Your RetinaGuard demo appointment",
+            body=(
+                f"Hello {patient.name},\n\n"
+                "Your RetinaGuard demo appointment has been saved.\n\n"
+                f"Clinic: {clinic.name}\n"
+                f"Date: {appointment.appointment_date:%B} {appointment.appointment_date.day}, "
+                f"{appointment.appointment_date.year}\n"
+                f"Time: {appointment.appointment_time:%H:%M} Africa/Cairo\n"
+                f"Reference: {appointment.reference}\n\n"
+                "This is an illustrative demo booking. The clinic has not been contacted, "
+                "and this email is not confirmation of a real clinic reservation.\n\n"
+                "RetinaGuard"
+            ),
+        )
+        email_sent = True
+    except Exception:
+        logger.exception("Failed to send appointment confirmation email")
+    return appointment_data(appointment, db, confirmation_email_sent=email_sent)
 
 
 @router.patch("/appointments/{reference}/cancel", response_model=AppointmentResponse)

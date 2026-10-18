@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 import database
 from database import Base, get_db
 from main import app
+from routers import portal
 from routers.portal import PROVIDERS, seed_clinics
 
 
@@ -33,6 +34,8 @@ class PortalTests(unittest.TestCase):
             seed_clinics(session)
         self.password_rounds_patch = patch("security.PASSWORD_ITERATIONS", 1000)
         self.password_rounds_patch.start()
+        self.email_patch = patch("routers.portal.send_email")
+        self.email_sender = self.email_patch.start()
         self.client = TestClient(app)
         self.patient_headers = self.register("patient@example.com")
         clinic = self.client.post("/auth/clinic/login", json={
@@ -45,6 +48,7 @@ class PortalTests(unittest.TestCase):
         self.client.close()
         app.dependency_overrides.clear()
         self.password_rounds_patch.stop()
+        self.email_patch.stop()
         self.engine.dispose()
 
     def register(self, email):
@@ -82,6 +86,14 @@ class PortalTests(unittest.TestCase):
         created = self.client.post("/appointments", headers=self.patient_headers, json=payload)
         self.assertEqual(created.status_code, 201, created.text)
         self.assertEqual(created.json()["patient_name"], "Example Patient")
+        self.assertTrue(created.json()["confirmation_email_sent"])
+        self.email_sender.assert_called_once()
+        email = self.email_sender.call_args.kwargs
+        self.assertEqual(email["recipient"], "patient@example.com")
+        self.assertIn(clinic.name, email["body"])
+        self.assertIn(slot, email["body"])
+        self.assertIn(created.json()["reference"], email["body"])
+        self.assertIn("not confirmation of a real clinic reservation", email["body"])
         reference = created.json()["reference"]
         self.assertEqual(len(self.client.get("/appointments/mine", headers=self.patient_headers).json()), 1)
         self.assertEqual(len(self.client.get("/appointments", headers=self.clinic_headers).json()), 1)
@@ -95,6 +107,21 @@ class PortalTests(unittest.TestCase):
             item["slots"] for item in self.client.get(f"/clinics/{clinic.id}/availability").json()
             if item["date"] == target["date"]
         ))
+
+    def test_email_failure_does_not_undo_booking(self):
+        self.email_sender.side_effect = RuntimeError("SMTP unavailable")
+        clinic = next(item for item in PROVIDERS if item.id == "bright")
+        availability = self.client.get(f"/clinics/{clinic.id}/availability")
+        self.assertEqual(availability.status_code, 200, availability.text)
+        target = next(item for item in availability.json() if item["slots"])
+        payload = {"clinic_id": clinic.id, "date": target["date"], "time": target["slots"][0]}
+
+        with self.assertLogs("routers.portal", level="ERROR"):
+            response = self.client.post("/appointments", headers=self.patient_headers, json=payload)
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertFalse(response.json()["confirmation_email_sent"])
+        self.assertEqual(len(self.client.get("/appointments/mine", headers=self.patient_headers).json()), 1)
 
     def test_clinic_role_cannot_read_patient_measurements(self):
         response = self.client.get("/health/readings", headers=self.clinic_headers)

@@ -171,3 +171,19 @@ class AppointmentResponse(BaseModel):
     date: date
     time: time
     status: str
+    confirmation_email_sent: bool | None = None
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1200)
+
+
+class PatientChatRequest(BaseModel):
+    consent: bool
+    message: str = Field(min_length=1, max_length=1200)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+
+
+class PatientChatResponse(BaseModel):
+    reply: str

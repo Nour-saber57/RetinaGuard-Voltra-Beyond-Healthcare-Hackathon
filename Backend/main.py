@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine, migrate_schema, SessionLocal
 from email_service import send_email
-from routers import cases, portal
+from routers import cases, chat, portal
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.add_middleware(
 )
 
 app.include_router(cases.router)
+app.include_router(chat.router)
 app.include_router(portal.router)
 
 

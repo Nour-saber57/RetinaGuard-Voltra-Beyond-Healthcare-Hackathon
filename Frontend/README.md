@@ -40,6 +40,7 @@ This export does not change or upload to your repository automatically.
 - Profile with contact information and personal charts.
 - API-provided illustrative clinics, location sorting, available time slots, booking and cancellation.
 - Five-stage care progress tracker.
+- Patient-only chatbot for questions about saved health and care records.
 - Clinic dashboard, patient records, screening image upload, and image preview.
 
 ## Clinic demo credentials
@@ -53,14 +54,15 @@ These are intentionally public example credentials, not secrets or production au
 
 - Patient accounts, contact details, diabetes type, health measurements, care milestones, appointments, and screening records are saved in the backend SQLite database. Sign in again after refreshing; access tokens are held in memory only.
 - Patient endpoints are scoped to the signed-in patient. Clinic-wide endpoints require a clinic token. Clinic demo credentials are public examples and must be replaced for any deployment.
-- Clinics, coordinates, fees, hours, and slot availability are illustrative. Bookings are database-backed demonstrations, not real clinic reservations. No messages, payment, or retinal AI analysis occur.
+- Clinics, coordinates, fees, hours, and slot availability are illustrative. Bookings are database-backed demonstrations, not real clinic reservations. A booking receipt is emailed to the patient's saved address; the clinic is not contacted. No payment or retinal AI analysis occurs.
 - Uploaded JPEG/PNG images are stored under `Backend/uploads`. The service does not analyze or diagnose images.
+- Patient chat requires `GEMINI_API_KEY` in the repository-root `.env`. The key stays on the backend. After explicit consent, the patient's question, recent chat, and a limited summary of their own profile/measurement/appointment/screening records are sent to Google Gemini. Chat is not saved by RetinaGuard; Gemini processes the request under Google's API terms. The assistant is not a clinician and cannot diagnose.
 - Case confirmation email is disabled unless `SEND_CASE_EMAILS=true` is explicitly configured.
 - Use example information only. This prototype has not had the security, privacy, clinical, or operational review needed for real patient records.
 - SQLite tables are created at startup. The existing `cases` table receives a small nullable ownership-column migration; other future schema changes should use a migration tool before deployment.
 
 ## Source organization
 
-The exported `index.html` matches the deployed frontend. CSS is in its `<style>` block and application logic in its `<script>` block. Features were added incrementally; some later function assignments extend earlier implementations. Preserve script order. There are no framework dependencies or bundled API keys.
+The main application remains in `index.html`; the record-chat widget is in `chat.js` and `chat.css`. Features were added incrementally; some later function assignments extend earlier implementations. Preserve script order. There are no framework dependencies or bundled API keys.
 
 No Sites hosting manifest, source credentials, Git history, environment files, or private server configuration is included.
